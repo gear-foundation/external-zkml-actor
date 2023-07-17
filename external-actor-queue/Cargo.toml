@@ -1,0 +1,30 @@
+[package]
+name = "external-actor-queue"
+version = "0.1.0"
+build = "build.rs"
+
+[dependencies]
+gstd = { git = "https://github.com/gear-tech/gear.git" }
+gcore = { git = "https://github.com/gear-tech/gear.git" }
+codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
+scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+hashbrown = "0.13"
+hex-literal = "*"
+
+#TODO: reference to https://github.com/mertwole/gear-external-ml-actor-deps
+halo2_proofs = { path = "../../halo2/halo2_proofs", default-features = false, features = ["circuit-params"] }
+halo2_gadgets = { path = "../../halo2/halo2_gadgets", default-features = false }
+halo2curves = { path = "../../halo2/halo2curves", default-features = false }
+zkml = { path = "../../zkml-wasm" }
+
+[build-dependencies]
+gear-wasm-builder = { git = "https://github.com/gear-tech/gear.git" }
+
+[dev-dependencies]
+gtest = { git = "https://github.com/gear-tech/gear.git" }
+
+[features]
+debug = ["gstd/debug"]
+default = ["std"]
+std = []
