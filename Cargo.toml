@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# TODO: Reference https://github.com/mertwole/gear-external-ml-actor-deps
-zkml = { path = "../halo2_dbg/zkml" } # { git = "https://github.com/ddkang/zkml" }
+zkml = { git = "https://github.com/mertwole/gear-external-ml-actor-deps" }
 
 gclient = { git = "https://github.com/gear-tech/gear" }
 gear-core = { git = "https://github.com/gear-tech/gear" }
@@ -15,8 +14,7 @@ codec = { package = "parity-scale-codec", version = "3.4.0", default-features = 
 serde = "1.0"
 rmp-serde = "*"
 
-# TODO: Reference https://github.com/mertwole/gear-external-ml-actor-deps
-halo2_proofs = { path = "../halo2_dbg/halo2/halo2_proofs", features = ["circuit-params"] }# { git="https://github.com/privacy-scaling-explorations/halo2", package="halo2_proofs", rev="17e9765c199670534c0299c96128d0464a188d0b", features = ["circuit-params"] }
+halo2_proofs = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", features = ["circuit-params"] }
 
 futures = "0.3.28"
 rand = "0.8.5"

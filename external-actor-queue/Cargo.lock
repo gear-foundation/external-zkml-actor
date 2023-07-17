@@ -399,14 +399,14 @@ dependencies = [
  "gear-wasm-builder",
  "gstd",
  "gtest",
- "halo2_gadgets",
- "halo2_proofs",
- "halo2curves",
+ "halo2_gadgets_wasm",
+ "halo2_proofs_wasm",
+ "halo2curves_wasm",
  "hashbrown 0.13.2",
  "hex-literal",
  "parity-scale-codec",
  "scale-info",
- "zkml",
+ "zkml-wasm",
 ]
 
 [[package]]
@@ -499,7 +499,7 @@ dependencies = [
 [[package]]
 name = "galloc"
 version = "0.2.2"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 dependencies = [
  "dlmalloc",
 ]
@@ -507,7 +507,7 @@ dependencies = [
 [[package]]
 name = "gcore"
 version = "0.2.2"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 dependencies = [
  "gear-core-errors",
  "gsys",
@@ -579,7 +579,7 @@ dependencies = [
 [[package]]
 name = "gear-core-errors"
 version = "0.1.0"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 dependencies = [
  "derive_more",
  "enum-iterator",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "gstd"
 version = "0.2.2"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 dependencies = [
  "bs58",
  "futures",
@@ -714,7 +714,7 @@ dependencies = [
 [[package]]
 name = "gstd-codegen"
 version = "0.1.0"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -724,7 +724,7 @@ dependencies = [
 [[package]]
 name = "gsys"
 version = "0.2.2"
-source = "git+https://github.com/gear-tech/gear.git#db0bf49b956701f86960bffc784ecb640cad4781"
+source = "git+https://github.com/gear-tech/gear.git#5f1c499f26956901f21f3892b1593910fb09def6"
 
 [[package]]
 name = "gtest"
@@ -751,28 +751,30 @@ dependencies = [
 ]
 
 [[package]]
-name = "halo2_gadgets"
+name = "halo2_gadgets_wasm"
 version = "0.2.0"
+source = "git+https://github.com/mertwole/gear-external-ml-actor-deps#e7c5220f3b986d9f06d1d82cce35fab878db53c9"
 dependencies = [
  "bitvec",
  "ff",
  "group",
  "gstd",
- "halo2_proofs",
- "halo2curves",
+ "halo2_proofs_wasm",
+ "halo2curves_wasm",
  "no-std-compat",
  "no_std_io",
 ]
 
 [[package]]
-name = "halo2_proofs"
+name = "halo2_proofs_wasm"
 version = "0.2.0"
+source = "git+https://github.com/mertwole/gear-external-ml-actor-deps#e7c5220f3b986d9f06d1d82cce35fab878db53c9"
 dependencies = [
  "blake2b_simd",
  "ff",
  "group",
  "gstd",
- "halo2curves",
+ "halo2curves_wasm",
  "libm",
  "no-std-compat",
  "no_std_io",
@@ -783,8 +785,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "halo2curves"
+name = "halo2curves_wasm"
 version = "0.3.2"
+source = "git+https://github.com/mertwole/gear-external-ml-actor-deps#e7c5220f3b986d9f06d1d82cce35fab878db53c9"
 dependencies = [
  "ff",
  "group",
@@ -1891,13 +1894,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "zkml"
+name = "zkml-wasm"
 version = "0.0.1"
+source = "git+https://github.com/mertwole/gear-external-ml-actor-deps#e7c5220f3b986d9f06d1d82cce35fab878db53c9"
 dependencies = [
  "gstd",
- "halo2_gadgets",
- "halo2_proofs",
- "halo2curves",
+ "halo2_gadgets_wasm",
+ "halo2_proofs_wasm",
+ "halo2curves_wasm",
  "lazy_static",
  "libm",
  "ndarray",

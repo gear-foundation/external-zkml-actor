@@ -10,10 +10,10 @@ mod code {
 pub use code::WASM_BINARY_OPT as WASM_BINARY;
 
 extern crate gstd;
-extern crate halo2_proofs;
-extern crate halo2curves;
+extern crate halo2_proofs_wasm;
+extern crate halo2curves_wasm;
 extern crate hashbrown;
-extern crate zkml;
+extern crate zkml_wasm;
 
 pub mod events;
 pub mod io;
@@ -23,14 +23,14 @@ mod tests;
 
 use gstd::{prelude::*, MessageId};
 
-use halo2curves::serde::SerdeObject;
+use halo2curves_wasm::serde::SerdeObject;
 use hashbrown::HashMap;
 
 use io::{GadgetConfigCodec, Incoming, KzgParamsNoVec};
 use queue::{NewMessage, Queue};
 
-use halo2_proofs::{
-    halo2curves::bn256::{Bn256, Fr, G1Affine},
+use halo2_proofs_wasm::{
+    halo2curves_wasm::bn256::{Bn256, Fr, G1Affine},
     plonk::{verify_proof, VerifyingKey},
     poly::{
         commitment::Params,
@@ -146,7 +146,7 @@ unsafe extern "C" fn handle() {
                 gcore::exec::wake(wake_id.into()).expect("Failed to wake");
 
                 unsafe {
-                    zkml::model::GADGET_CONFIG = Some(
+                    zkml_wasm::model::GADGET_CONFIG = Some(
                         GadgetConfigCodec::decode(&mut &*gadget_config)
                             .unwrap()
                             .into(),
@@ -177,7 +177,7 @@ unsafe extern "C" fn handle() {
                 .unwrap()
                 .append(&mut g_lagrange);
         }
-        Incoming::FillVkeyMap => zkml::gadgets::bias_div_round_relu6::fill_vkey_map(),
+        Incoming::FillVkeyMap => zkml_wasm::gadgets::bias_div_round_relu6::fill_vkey_map(),
         Incoming::FillDataForVerify {
             verifier_key,
             outcome,
@@ -197,13 +197,13 @@ unsafe extern "C" fn handle() {
                 }
             };
 
-            let vkey: VerifyingKey<G1Affine> =
-                VerifyingKey::read::<_, zkml::model::ModelCircuit<Fr>>(
-                    &mut &verifier_key[..],
-                    SerdeFormat::RawBytes,
-                    (),
-                )
-                .expect("Invalid verifying key");
+            let vkey: VerifyingKey<G1Affine> = VerifyingKey::read::<
+                _,
+                zkml_wasm::model::ModelCircuit<Fr>,
+            >(
+                &mut &verifier_key[..], SerdeFormat::RawBytes, ()
+            )
+            .expect("Invalid verifying key");
 
             let pub_vals: Vec<_> = outcome
                 .chunks(32)
@@ -236,7 +236,7 @@ unsafe extern "C" fn handle() {
                 VerifierSHPLONK<'_, Bn256>,
                 Challenge255<G1Affine>,
                 Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
-                halo2_proofs::poly::kzg::strategy::SingleStrategy<'_, Bn256>,
+                halo2_proofs_wasm::poly::kzg::strategy::SingleStrategy<'_, Bn256>,
             >(
                 &params_kzg,
                 &vkey,

@@ -12,11 +12,10 @@ futures = { version = "0.3", default-features = false, features = ["alloc"] }
 hashbrown = "0.13"
 hex-literal = "*"
 
-#TODO: reference to https://github.com/mertwole/gear-external-ml-actor-deps
-halo2_proofs = { path = "../../halo2/halo2_proofs", default-features = false, features = ["circuit-params"] }
-halo2_gadgets = { path = "../../halo2/halo2_gadgets", default-features = false }
-halo2curves = { path = "../../halo2/halo2curves", default-features = false }
-zkml = { path = "../../zkml-wasm" }
+halo2_proofs_wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", default-features = false, features = ["circuit-params"] }
+halo2_gadgets_wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", default-features = false }
+halo2curves_wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", default-features = false }
+zkml-wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps" }
 
 [build-dependencies]
 gear-wasm-builder = { git = "https://github.com/gear-tech/gear.git" }

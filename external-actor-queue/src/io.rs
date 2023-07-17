@@ -1,9 +1,9 @@
 use codec::{Decode, Encode};
 use gstd::prelude::*;
 
-use halo2_proofs::plonk::{Advice, Column, Fixed, Selector, TableColumn};
-use zkml::gadgets::gadget::GadgetConfig;
-use zkml::gadgets::gadget::GadgetType;
+use halo2_proofs_wasm::plonk::{Advice, Column, Fixed, Selector, TableColumn};
+use zkml_wasm::gadgets::gadget::GadgetConfig;
+use zkml_wasm::gadgets::gadget::GadgetType;
 
 use crate::ProofData;
 
