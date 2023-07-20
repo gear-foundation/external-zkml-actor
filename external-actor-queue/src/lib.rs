@@ -38,7 +38,6 @@ use halo2_proofs_wasm::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
             msm::DualMSMData,
             multiopen::shplonk::IntermediateSetsData,
-            //multiopen::VerifierSHPLONK,
             strategy::SingleStrategy,
         },
     },

@@ -252,10 +252,12 @@ async fn sender(program_id: ProgramId) {
     let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::GenerateMSMStage2 sent");
 
-    println!("Incoming::EvaluateMSM sending...");
-    let payload = external_actor_queue::io::Incoming::EvaluateMSM;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::EvaluateMSM sent");
+    for i in 0..8 {
+        println!("Incoming::EvaluateMSM {} sending...", i);
+        let payload = external_actor_queue::io::Incoming::EvaluateMSM;
+        let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+        println!("Incoming::EvaluateMSM sent");
+    }
 
     println!("Incoming::Verify sending...");
     let payload = external_actor_queue::io::Incoming::Verify;
