@@ -4,6 +4,7 @@ use codec::{Decode, Encode};
 use external_actor_queue::events::Event as ExtActorEvent;
 use external_actor_queue::io::KzgParamsNoVec;
 use external_actor_queue::queue::Message as ExtQueueMessage;
+use gclient::EventListener;
 use gclient::{DispatchStatus, EventProcessor, GearApi, Result, WSAddress};
 use gear_core::ids::MessageId;
 use gear_core::ids::ProgramId;
@@ -172,27 +173,38 @@ fn get_kzg_data() -> (Vec<Vec<u8>>, Vec<Vec<u8>>, KzgParamsNoVec) {
     }
 }
 
+async fn send_message_and_wait_for_success<E: Encode>(
+    api: &GearApi,
+    listener: &mut EventListener,
+    pid: ProgramId,
+    payload: E,
+) -> MessageId {
+    let (message_id, _) = api
+        .send_message(pid, payload, api.block_gas_limit().unwrap(), 0)
+        .await
+        .unwrap();
+    assert!(listener
+        .message_processed(message_id)
+        .await
+        .unwrap()
+        .succeed());
+
+    message_id
+}
+
 async fn sender(program_id: ProgramId) {
     let api = GearApi::init_with(WSAddress::dev(), "//Bob").await.unwrap();
     let mut listener = api.subscribe().await.unwrap();
     assert!(listener.blocks_running().await.unwrap());
 
     // Send request to actor.
+    println!("Incoming::New sending...");
     let model =
         zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
     let model_data = rmp_serde::to_vec(&model).unwrap();
     let payload = external_actor_queue::io::Incoming::New(model_data);
-
-    println!("Incoming::New send");
-    let (new_payload_message_id, _) = api
-        .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-        .await
-        .unwrap();
-    assert!(listener
-        .message_processed(new_payload_message_id)
-        .await
-        .unwrap()
-        .succeed());
+    let new_payload_message_id =
+        send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::New sent");
 
     let (g_data, g_lagrange_data, kzg_params) = get_kzg_data();
@@ -208,64 +220,46 @@ async fn sender(program_id: ProgramId) {
             g_data: g_data.to_vec(),
             g_lagrange_data: g_lagrange_data.to_vec(),
         };
-        let (message_id, _) = api
-            .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-            .await
-            .unwrap();
-        assert!(listener
-            .message_processed(message_id)
-            .await
-            .unwrap()
-            .succeed());
+        let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
         println!("Incoming::LoadKZG sent");
     }
 
-    println!("Incoming::FillVkeyMap send");
+    println!("Incoming::FillVkeyMap sending...");
     let payload = external_actor_queue::io::Incoming::FillVkeyMap;
-    let (message_id, _) = api
-        .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-        .await
-        .unwrap();
-    assert!(listener
-        .message_processed(message_id)
-        .await
-        .unwrap()
-        .succeed());
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::FillVkeyMap sent");
 
-    println!("Incoming::FillDataForVerify send");
+    println!("Incoming::FillDataForVerify sending...");
     let outcome = std::fs::read("./public_vals").unwrap();
     let verifier_key = std::fs::read("./vkey").unwrap();
-
     let payload = external_actor_queue::io::Incoming::FillDataForVerify {
         verifier_key,
         outcome,
         kzg_params,
     };
-    let (message_id, _) = api
-        .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-        .await
-        .unwrap();
-    assert!(listener
-        .message_processed(message_id)
-        .await
-        .unwrap()
-        .succeed());
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::FillDataForVerify sent");
 
-    println!("Incoming::Verify send");
-    let payload = external_actor_queue::io::Incoming::PreVerify {
+    println!("Incoming::GenerateMSMStage1 sending...");
+    let payload = external_actor_queue::io::Incoming::GenerateMSMStage1 {
         message_id: new_payload_message_id.encode(),
     };
-    let (message_id, _) = api
-        .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-        .await
-        .unwrap();
-    assert!(listener
-        .message_processed(message_id)
-        .await
-        .unwrap()
-        .succeed());
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Incoming::GenerateMSMStage1 sent");
+
+    println!("Incoming::GenerateMSMStage2 sending...");
+    let payload = external_actor_queue::io::Incoming::GenerateMSMStage2;
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Incoming::GenerateMSMStage2 sent");
+
+    println!("Incoming::EvaluateMSM sending...");
+    let payload = external_actor_queue::io::Incoming::EvaluateMSM;
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Incoming::EvaluateMSM sent");
+
+    println!("Incoming::Verify sending...");
+    let payload = external_actor_queue::io::Incoming::Verify;
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::Verify sent");
 
     panic!("DONE");
@@ -314,16 +308,10 @@ async fn external_actor(program_id: ProgramId) {
                         gadget_config,
                     };
 
-                    println!("Incoming::Proof send");
-                    let (message_id, _) = api
-                        .send_message(program_id, payload, api.block_gas_limit().unwrap(), 0)
-                        .await
-                        .unwrap();
-                    assert!(listener
-                        .message_processed(message_id)
-                        .await
-                        .unwrap()
-                        .succeed());
+                    println!("Incoming::Proof sending...");
+                    let _ =
+                        send_message_and_wait_for_success(&api, &mut listener, program_id, payload)
+                            .await;
                     println!("Incoming::Proof sent");
                 }
                 ExtActorEvent::InvalidProof { index } => {

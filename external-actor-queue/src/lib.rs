@@ -31,12 +31,14 @@ use queue::{NewMessage, Queue};
 
 use halo2_proofs_wasm::{
     halo2curves_wasm::bn256::{Bn256, Fr, G1Affine},
-    plonk::{verify_proof, VerifyingKey},
+    plonk::{verify_proof_stage_1, verify_proof_stage_2, VerifyingKey},
     poly::{
         commitment::Params,
         kzg::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
-            multiopen::VerifierSHPLONK,
+            msm::DualMSMData,
+            multiopen::shplonk::IntermediateSetsData,
+            //multiopen::VerifierSHPLONK,
             strategy::SingleStrategy,
         },
     },
@@ -50,6 +52,11 @@ static mut ACTOR_CODE_HASH: [u8; 32] = [0u8; 32];
 static mut ACTOR_STATE_HASH: [u8; 32] = [0u8; 32];
 static mut WAKERS: Option<HashMap<u64, MessageId>> = None;
 static mut PROOFS: Option<HashMap<MessageId, ProofData>> = None;
+
+static mut VERIFY_TRANSCRIPT: Option<Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>> = None;
+
+static mut VERIFY_INTERMEDIATE_SETS: Option<IntermediateSetsData<Fr>> = None;
+static mut VERIFY_MSM: Option<DualMSMData<Bn256>> = None;
 
 static mut KZG_G_DATA: Option<Vec<G1Affine>> = None;
 static mut KZG_G_LAGRANGE_DATA: Option<Vec<G1Affine>> = None;
@@ -218,38 +225,57 @@ unsafe extern "C" fn handle() {
                 });
             }
         }
-        Incoming::PreVerify { message_id } => {
-            let proof = pop_proof(MessageId::decode(&mut &message_id[..]).unwrap())
-                .expect("Failed to pop proof");
+        Incoming::GenerateMSMStage1 { message_id } => {
+            let proof = PROOFS
+                .as_ref()
+                .unwrap()
+                .get(&MessageId::decode(&mut &message_id[..]).unwrap())
+                .unwrap();
 
             let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
             let vkey = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().vkey };
             let pub_vals = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().pub_vals };
 
-            let strategy: SingleStrategy<'_, Bn256> = SingleStrategy::new(&params_kzg);
-
             let mut transcript: Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>> =
                 Blake2bRead::<_, _, Challenge255<_>>::init(&proof[..]);
 
-            let valid = verify_proof::<
-                KZGCommitmentScheme<Bn256>,
-                VerifierSHPLONK<'_, Bn256>,
+            let intermediate_sets =
+                verify_proof_stage_1::<
+                    Challenge255<G1Affine>,
+                    Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
+                >(&params_kzg, &vkey, &[&[&pub_vals]], &mut transcript)
+                .expect("Failed to pre-verify");
+
+            VERIFY_TRANSCRIPT = Some(transcript);
+
+            VERIFY_INTERMEDIATE_SETS = Some(intermediate_sets);
+        }
+        Incoming::GenerateMSMStage2 => {
+            let intermediate_sets = VERIFY_INTERMEDIATE_SETS.as_ref().unwrap();
+            let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
+
+            let transcript = VERIFY_TRANSCRIPT.as_mut().unwrap();
+
+            let intermediate_sets = VERIFY_INTERMEDIATE_SETS.as_ref().unwrap();
+
+            let msm_data = verify_proof_stage_2::<
                 Challenge255<G1Affine>,
                 Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
-                halo2_proofs_wasm::poly::kzg::strategy::SingleStrategy<'_, Bn256>,
-            >(
-                &params_kzg,
-                &vkey,
-                strategy,
-                &[&[&pub_vals]],
-                &mut transcript,
-            )
-            .is_ok();
+            >(&params_kzg, transcript, intermediate_sets)
+            .expect("Failed to pre-verify");
 
-            gstd::debug!("VALID: {valid}");
+            VERIFY_MSM = Some(msm_data);
+        }
+        Incoming::EvaluateMSM => {
+            let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
+            VERIFY_MSM.as_mut().unwrap().eval_staged(params_kzg);
         }
         Incoming::Verify => {
-            //
+            let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
+
+            let verified = VERIFY_MSM.clone().unwrap().check(params_kzg);
+
+            gstd::debug!("proof validity: {}", verified);
         }
     }
 }

@@ -122,9 +122,11 @@ pub enum Incoming {
         outcome: Vec<u8>,
         kzg_params: KzgParamsNoVec,
     },
-    PreVerify {
+    GenerateMSMStage1 {
         message_id: Vec<u8>,
     },
+    GenerateMSMStage2,
+    EvaluateMSM,
     Verify,
 }
 
