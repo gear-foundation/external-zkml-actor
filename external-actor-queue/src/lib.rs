@@ -23,15 +23,21 @@ mod tests;
 
 use gstd::{prelude::*, MessageId};
 
+use halo2curves_wasm::pairing::{MillerLoopResult, MultiMillerLoop};
 use halo2curves_wasm::serde::SerdeObject;
 use hashbrown::HashMap;
 
 use io::{GadgetConfigCodec, Incoming, KzgParamsNoVec};
 use queue::{NewMessage, Queue};
 
+use halo2_proofs_wasm::poly::commitment::Verifier;
+use halo2_proofs_wasm::poly::kzg::msm::DualMSM;
+use halo2_proofs_wasm::poly::kzg::multiopen::shplonk::{
+    verifier::VerifierIntermediateState, VerifierSHPLONK,
+};
 use halo2_proofs_wasm::{
     halo2curves_wasm::bn256::{Bn256, Fr, G1Affine},
-    plonk::{verify_proof_stage_1, verify_proof_stage_2, VerifyingKey},
+    plonk::{verify_proof_stage_1, VerifyingKey},
     poly::{
         commitment::Params,
         kzg::{
@@ -44,6 +50,7 @@ use halo2_proofs_wasm::{
     transcript::{Blake2bRead, Challenge255, TranscriptReadBuffer},
     SerdeFormat,
 };
+use halo2curves_wasm::group::Group;
 
 pub type ProofData = Vec<u8>;
 
@@ -57,8 +64,12 @@ static mut VERIFY_TRANSCRIPT: Option<Blake2bRead<&[u8], G1Affine, Challenge255<G
 static mut VERIFY_INTERMEDIATE_SETS: Option<IntermediateSetsData<Fr>> = None;
 static mut VERIFY_MSM: Option<DualMSMData<Bn256>> = None;
 
+static mut VERIFIER_INTERMEDIATE_STATE: Option<VerifierIntermediateState<Bn256>> = None;
+
 static mut KZG_G_DATA: Option<Vec<G1Affine>> = None;
 static mut KZG_G_LAGRANGE_DATA: Option<Vec<G1Affine>> = None;
+
+static mut MML_RESULT: Option<<Bn256 as MultiMillerLoop>::Result> = None;
 
 struct DataForVerify {
     params_kzg: ParamsKZG<Bn256>,
@@ -246,33 +257,58 @@ unsafe extern "C" fn handle() {
                 .expect("Failed to pre-verify");
 
             VERIFY_TRANSCRIPT = Some(transcript);
-
             VERIFY_INTERMEDIATE_SETS = Some(intermediate_sets);
         }
         Incoming::GenerateMSMStage2 => {
             let intermediate_sets = VERIFY_INTERMEDIATE_SETS.as_ref().unwrap();
             let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
-
             let transcript = VERIFY_TRANSCRIPT.as_mut().unwrap();
 
+            let msm = DualMSM::new(params_kzg);
+            let verifier = VerifierSHPLONK::new(params_kzg);
+            let intermediate_sets = intermediate_sets.get_sets();
+
+            let int_state = verifier
+                .pre_verify_proof_from_intermediate_sets(transcript, intermediate_sets, msm)
+                .expect("Error opening proof");
+
+            VERIFIER_INTERMEDIATE_STATE = Some(int_state);
+        }
+        Incoming::GenerateMSMStage3 => {
             let intermediate_sets = VERIFY_INTERMEDIATE_SETS.as_ref().unwrap();
+            let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
+            let transcript = VERIFY_TRANSCRIPT.as_mut().unwrap();
+            let int_state = VERIFIER_INTERMEDIATE_STATE.take().unwrap();
 
-            let msm_data = verify_proof_stage_2::<
-                Challenge255<G1Affine>,
-                Blake2bRead<&[u8], G1Affine, Challenge255<G1Affine>>,
-            >(&params_kzg, transcript, intermediate_sets)
-            .expect("Failed to pre-verify");
+            let msm = DualMSM::new(params_kzg);
+            let verifier = VerifierSHPLONK::new(params_kzg);
+            let intermediate_sets = intermediate_sets.get_sets();
 
+            let guard = verifier
+                .verify_proof_from_intermediate_sets(transcript, intermediate_sets, msm, int_state)
+                .expect("Error opening proof");
+
+            let msm = guard.msm_accumulator;
+            let msm_data = DualMSMData::new(msm);
             VERIFY_MSM = Some(msm_data);
         }
         Incoming::EvaluateMSM => {
             let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
             VERIFY_MSM.as_mut().unwrap().eval_staged(params_kzg);
         }
-        Incoming::Verify => {
+        Incoming::PreVerify => {
             let params_kzg = unsafe { &DATA_FOR_VERIFY.as_ref().unwrap().params_kzg };
-
-            let verified = VERIFY_MSM.clone().unwrap().check(params_kzg);
+            let mml_res = VERIFY_MSM.clone().unwrap().check_stage_1(params_kzg);
+            MML_RESULT = Some(mml_res);
+        }
+        Incoming::Verify => {
+            let verified = bool::from(
+                MML_RESULT
+                    .take()
+                    .unwrap()
+                    .final_exponentiation()
+                    .is_identity(),
+            );
 
             gstd::debug!("proof validity: {}", verified);
         }

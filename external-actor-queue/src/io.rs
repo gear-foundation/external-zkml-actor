@@ -126,7 +126,9 @@ pub enum Incoming {
         message_id: Vec<u8>,
     },
     GenerateMSMStage2,
+    GenerateMSMStage3,
     EvaluateMSM,
+    PreVerify,
     Verify,
 }
 

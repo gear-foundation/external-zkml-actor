@@ -213,7 +213,7 @@ async fn sender(program_id: ProgramId) {
         g_lagrange_data.chunks(g_lagrange_data.len() / 128),
     )
     .enumerate()
-    .skip(127)
+    //.skip(127)
     {
         println!("Incoming::LoadKZG sending... {i}");
         let payload = external_actor_queue::io::Incoming::LoadKzg {
@@ -252,12 +252,22 @@ async fn sender(program_id: ProgramId) {
     let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Incoming::GenerateMSMStage2 sent");
 
-    for i in 0..8 {
+    println!("Incoming::GenerateMSMStage3 sending...");
+    let payload = external_actor_queue::io::Incoming::GenerateMSMStage3;
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Incoming::GenerateMSMStage3 sent");
+
+    for i in 0..29 {
         println!("Incoming::EvaluateMSM {} sending...", i);
         let payload = external_actor_queue::io::Incoming::EvaluateMSM;
         let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
         println!("Incoming::EvaluateMSM sent");
     }
+
+    println!("Incoming::PreVerify sending...");
+    let payload = external_actor_queue::io::Incoming::PreVerify;
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Incoming::PreVerify sent");
 
     println!("Incoming::Verify sending...");
     let payload = external_actor_queue::io::Incoming::Verify;
