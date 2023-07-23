@@ -1,17 +1,10 @@
 use codec::{Decode, Encode};
 use gstd::prelude::*;
 
+use gstd::ActorId;
 use halo2_proofs_wasm::plonk::{Advice, Column, Fixed, Selector, TableColumn};
 use zkml_wasm::gadgets::gadget::GadgetConfig;
 use zkml_wasm::gadgets::gadget::GadgetType;
-
-use crate::ProofData;
-
-#[derive(Encode, Decode, Debug, TypeInfo)]
-pub enum ExecutionOutcome {
-    Ok(Option<Vec<u8>>),
-    Trap,
-}
 
 #[derive(codec::Encode, codec::Decode)]
 pub struct GadgetConfigCodec {
@@ -106,34 +99,36 @@ pub struct KzgParamsNoVec {
 
 #[derive(Encode, Decode, Debug, TypeInfo)]
 pub enum Incoming {
-    New(Vec<u8>),
-    Proof {
-        index: u64,
-        proof: ProofData,
-        gadget_config: Vec<u8>,
-    },
-    LoadKzg {
+    Initializing(InitializingMessage),
+    Prover(ProverMessage),
+    Client(ClientMessage),
+}
+
+#[derive(Encode, Decode, Debug, TypeInfo)]
+pub enum InitializingMessage {
+    LoadKZG {
         g_data: Vec<Vec<u8>>,
         g_lagrange_data: Vec<Vec<u8>>,
     },
     FillVkeyMap,
-    FillDataForVerify {
-        verifier_key: Vec<u8>,
-        outcome: Vec<u8>,
+    Finalize {
         kzg_params: KzgParamsNoVec,
+        gadget_config_data: Vec<u8>,
     },
-    GenerateMSMStage1 {
-        message_id: Vec<u8>,
-    },
-    GenerateMSMStage2,
-    GenerateMSMStage3,
-    EvaluateMSM,
-    PreVerify,
-    Verify,
 }
 
 #[derive(Encode, Decode, Debug, TypeInfo)]
-pub struct Initialization {
-    pub actor_code_hash: [u8; 32],
-    pub actor_state_hash: [u8; 32],
+pub enum ProverMessage {
+    SubmitProof {
+        client: ActorId,
+        proof_data: Vec<u8>,
+        pub_vals_data: Vec<u8>,
+    },
+}
+
+#[derive(Encode, Decode, Debug, TypeInfo)]
+pub enum ClientMessage {
+    SubmitInput { input: Vec<u8> },
+    VerifierKey { vkey_data: Vec<u8> },
+    Verify,
 }

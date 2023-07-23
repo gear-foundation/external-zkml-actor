@@ -99,16 +99,11 @@ async fn main() {
     let mut listener = api.subscribe().await.unwrap();
     assert!(listener.blocks_running().await.unwrap());
 
-    // Upload and init program.
-    let init = external_actor_queue::io::Initialization {
-        actor_code_hash: [0; 32],
-        actor_state_hash: [0; 32],
-    };
     let (message_id, program_id, _) = api
         .upload_program_bytes_by_path(
             WASM_PATH,
             gclient::now_micros().to_le_bytes(),
-            &init.encode(),
+            &vec![],
             api.block_gas_limit().unwrap(),
             0,
         )
@@ -121,7 +116,9 @@ async fn main() {
         .unwrap()
         .succeed());
 
-    futures::future::join(sender(program_id), external_actor(program_id)).await;
+    initializator(program_id).await;
+
+    futures::future::join(client(program_id), prover(program_id)).await;
 }
 
 #[derive(Debug, Clone)]
@@ -192,20 +189,17 @@ async fn send_message_and_wait_for_success<E: Encode>(
     message_id
 }
 
-async fn sender(program_id: ProgramId) {
+async fn initializator(program_id: ProgramId) {
     let api = GearApi::init_with(WSAddress::dev(), "//Bob").await.unwrap();
     let mut listener = api.subscribe().await.unwrap();
     assert!(listener.blocks_running().await.unwrap());
 
-    // Send request to actor.
-    println!("Incoming::New sending...");
-    let model =
-        zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
-    let model_data = rmp_serde::to_vec(&model).unwrap();
-    let payload = external_actor_queue::io::Incoming::New(model_data);
-    let new_payload_message_id =
-        send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::New sent");
+    println!("Init::FillVkeyMap sending...");
+    let payload = external_actor_queue::io::Incoming::Initializing(
+        external_actor_queue::io::InitializingMessage::FillVkeyMap,
+    );
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Init::FillVkeyMap sent");
 
     let (g_data, g_lagrange_data, kzg_params) = get_kzg_data();
     for (i, (g_data, g_lagrange_data)) in itertools::izip!(
@@ -215,69 +209,73 @@ async fn sender(program_id: ProgramId) {
     .enumerate()
     //.skip(127)
     {
-        println!("Incoming::LoadKZG sending... {i}");
-        let payload = external_actor_queue::io::Incoming::LoadKzg {
-            g_data: g_data.to_vec(),
-            g_lagrange_data: g_lagrange_data.to_vec(),
-        };
+        println!("Init::LoadKZG sending... {i}");
+        let payload = external_actor_queue::io::Incoming::Initializing(
+            external_actor_queue::io::InitializingMessage::LoadKZG {
+                g_data: g_data.to_vec(),
+                g_lagrange_data: g_lagrange_data.to_vec(),
+            },
+        );
         let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-        println!("Incoming::LoadKZG sent");
+        println!("Init::LoadKZG sent");
     }
 
-    println!("Incoming::FillVkeyMap sending...");
-    let payload = external_actor_queue::io::Incoming::FillVkeyMap;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::FillVkeyMap sent");
-
-    println!("Incoming::FillDataForVerify sending...");
-    let outcome = std::fs::read("./public_vals").unwrap();
-    let verifier_key = std::fs::read("./vkey").unwrap();
-    let payload = external_actor_queue::io::Incoming::FillDataForVerify {
-        verifier_key,
-        outcome,
-        kzg_params,
+    let model =
+        zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
+    let circuit = zkml::model::ModelCircuit::<Fr>::generate_from_msgpack(model, true);
+    // It's weird behaviour but this command fills GadgetConfig.
+    zkml::utils::proving_kzg::verify_circuit_kzg(circuit, "./vkey", "./proof", "./public_vals");
+    let gadget_config_data = unsafe {
+        GadgetConfigCodec::from(zkml::model::GADGET_CONFIG.lock().unwrap().clone()).encode()
     };
+
+    println!("Init::Finalize sending...");
+    let payload = external_actor_queue::io::Incoming::Initializing(
+        external_actor_queue::io::InitializingMessage::Finalize {
+            kzg_params,
+            gadget_config_data,
+        },
+    );
     let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::FillDataForVerify sent");
-
-    println!("Incoming::GenerateMSMStage1 sending...");
-    let payload = external_actor_queue::io::Incoming::GenerateMSMStage1 {
-        message_id: new_payload_message_id.encode(),
-    };
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::GenerateMSMStage1 sent");
-
-    println!("Incoming::GenerateMSMStage2 sending...");
-    let payload = external_actor_queue::io::Incoming::GenerateMSMStage2;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::GenerateMSMStage2 sent");
-
-    println!("Incoming::GenerateMSMStage3 sending...");
-    let payload = external_actor_queue::io::Incoming::GenerateMSMStage3;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::GenerateMSMStage3 sent");
-
-    for i in 0..29 {
-        println!("Incoming::EvaluateMSM {} sending...", i);
-        let payload = external_actor_queue::io::Incoming::EvaluateMSM;
-        let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-        println!("Incoming::EvaluateMSM sent");
-    }
-
-    println!("Incoming::PreVerify sending...");
-    let payload = external_actor_queue::io::Incoming::PreVerify;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::PreVerify sent");
-
-    println!("Incoming::Verify sending...");
-    let payload = external_actor_queue::io::Incoming::Verify;
-    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
-    println!("Incoming::Verify sent");
-
-    panic!("DONE");
+    println!("Init::Finalize sent");
 }
 
-async fn external_actor(program_id: ProgramId) {
+async fn client(program_id: ProgramId) {
+    let api = GearApi::init_with(WSAddress::dev(), "//Bob").await.unwrap();
+    let mut listener = api.subscribe().await.unwrap();
+    assert!(listener.blocks_running().await.unwrap());
+
+    println!("Client::SubmitInput sending...");
+    let model =
+        zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
+    let model_data = rmp_serde::to_vec(&model).unwrap();
+    let payload = external_actor_queue::io::Incoming::Client(
+        external_actor_queue::io::ClientMessage::SubmitInput { input: model_data },
+    );
+    let new_payload_message_id =
+        send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Client::SubmitInput sent");
+
+    println!("Client::VerifierKey sending...");
+    let vkey_data = std::fs::read("./vkey").unwrap();
+    let payload = external_actor_queue::io::Incoming::Client(
+        external_actor_queue::io::ClientMessage::VerifierKey { vkey_data },
+    );
+    let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+    println!("Client::VerifierKey sent");
+
+    // Should panic on last iteration.
+    for i in 0..35 {
+        println!("Client::Verify {i} sending...");
+        let payload = external_actor_queue::io::Incoming::Client(
+            external_actor_queue::io::ClientMessage::Verify,
+        );
+        let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
+        println!("Client::Verify {i} sent");
+    }
+}
+
+async fn prover(program_id: ProgramId) {
     let api = GearApi::init_with(WSAddress::dev(), "//Alice")
         .await
         .unwrap();
@@ -292,41 +290,28 @@ async fn external_actor(program_id: ProgramId) {
             let event = ExtActorEvent::decode(&mut msg.payload_bytes()).unwrap();
 
             match event {
-                ExtActorEvent::NewPayload { index, size } => {
-                    let queue: Vec<ExtQueueMessage> = api.read_state(program_id).await.unwrap();
-                    let msg = &queue[index as usize];
-                    let model: ModelMsgpack = rmp_serde::from_slice(&msg.payload).unwrap();
-                    let circuit =
-                        zkml::model::ModelCircuit::<Fr>::generate_from_msgpack(model, true);
+                ExtActorEvent::NewPayload { client } => {
+                    // TODO: Read inputs and compute proof.
+                    //let queue: Vec<ExtQueueMessage> = api.read_state(program_id).await.unwrap();
 
-                    // It's weird behaviour but this command fills GadgetConfig.
-                    zkml::utils::proving_kzg::verify_circuit_kzg(
-                        circuit,
-                        "./vkey",
-                        "./proof",
-                        "./public_vals",
+                    let proof_data = std::fs::read("./proof").unwrap();
+                    let pub_vals_data = std::fs::read("./public_vals").unwrap();
+
+                    let payload = external_actor_queue::io::Incoming::Prover(
+                        external_actor_queue::io::ProverMessage::SubmitProof {
+                            client,
+                            proof_data,
+                            pub_vals_data,
+                        },
                     );
 
-                    let gadget_config = unsafe {
-                        GadgetConfigCodec::from(zkml::model::GADGET_CONFIG.lock().unwrap().clone())
-                            .encode()
-                    };
-
-                    let proof = std::fs::read("./proof").unwrap();
-
-                    let payload = external_actor_queue::io::Incoming::Proof {
-                        index,
-                        proof,
-                        gadget_config,
-                    };
-
-                    println!("Incoming::Proof sending...");
+                    println!("Prover::SubmitProof sending...");
                     let _ =
                         send_message_and_wait_for_success(&api, &mut listener, program_id, payload)
                             .await;
-                    println!("Incoming::Proof sent");
+                    println!("Prover::SubmitProof sent");
                 }
-                ExtActorEvent::InvalidProof { index } => {
+                ExtActorEvent::InvalidProof { client } => {
                     panic!("Invalid proof");
                 }
             }

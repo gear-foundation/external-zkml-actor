@@ -1,4 +1,4 @@
-use gstd::prelude::*;
+use gstd::{prelude::*, ActorId};
 
 // Alice.
 pub static EVENT_DESTINATION: [u8; 32] =
@@ -6,8 +6,8 @@ pub static EVENT_DESTINATION: [u8; 32] =
 
 #[derive(Debug, Encode, Decode)]
 pub enum Event {
-    NewPayload { index: u64, size: u32 },
-    InvalidProof { index: u64 },
+    NewPayload { client: ActorId },
+    InvalidProof { client: ActorId },
 }
 
 pub fn send(event: Event) {
