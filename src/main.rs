@@ -1,41 +1,41 @@
 #![feature(offset_of)]
 
 use codec::{Decode, Encode};
-use external_actor_queue::events::Event as ExtActorEvent;
-use external_actor_queue::io::KzgParamsNoVec;
-use external_actor_queue::queue::Message as ExtQueueMessage;
-use gclient::EventListener;
-use gclient::{DispatchStatus, EventProcessor, GearApi, Result, WSAddress};
-use gear_core::ids::MessageId;
-use gear_core::ids::ProgramId;
-use halo2_proofs::arithmetic::Field;
-use halo2_proofs::halo2curves::ff::PrimeField;
-use halo2_proofs::halo2curves::group::Curve;
-use halo2_proofs::halo2curves::group::Group;
-use halo2_proofs::halo2curves::pairing::Engine;
-use halo2_proofs::halo2curves::serde::SerdeObject;
-use halo2_proofs::poly::commitment::{Params, ParamsProver};
-use halo2_proofs::transcript::TranscriptRead;
+use external_actor_queue::{events::Event as ExtActorEvent, io::KzgParamsNoVec};
+use gclient::{DispatchStatus, EventListener, EventProcessor, GearApi, Result, WSAddress};
+use gear_core::ids::{MessageId, ProgramId};
 use halo2_proofs::{
-    halo2curves::bn256::{Bn256, Fr, G1Affine},
-    plonk::{verify_proof, VerifyingKey},
-    poly::kzg::{
-        commitment::{KZGCommitmentScheme, ParamsKZG},
-        multiopen::VerifierSHPLONK,
-        strategy::SingleStrategy,
+    arithmetic::Field,
+    circuit,
+    halo2curves::{
+        bn256::{Bn256, Fr, G1Affine},
+        ff::PrimeField,
+        group::{Curve, Group},
+        pairing::Engine,
+        serde::SerdeObject,
     },
-    transcript::{Blake2bRead, Challenge255, TranscriptReadBuffer},
+    plonk::{keygen_vk, verify_proof, Advice, Column, Fixed, Selector, TableColumn, VerifyingKey},
+    poly::{
+        commitment::{Params, ParamsProver},
+        kzg::{
+            commitment::{KZGCommitmentScheme, ParamsKZG},
+            multiopen::VerifierSHPLONK,
+            strategy::SingleStrategy,
+        },
+    },
+    transcript::{Blake2bRead, Challenge255, TranscriptRead, TranscriptReadBuffer},
     SerdeFormat,
 };
 use itertools::Itertools;
-use zkml::gadgets::gadget::GadgetConfig;
-
-use std::io::Read;
-use std::{collections::BTreeSet, fs::File, io::BufReader};
-use zkml::utils::loader::ModelMsgpack;
-
-use halo2_proofs::plonk::{Advice, Column, Fixed, Selector, TableColumn};
-use zkml::gadgets::gadget::GadgetType;
+use std::{
+    collections::BTreeSet,
+    fs::File,
+    io::{BufReader, Read},
+};
+use zkml::{
+    gadgets::gadget::{GadgetConfig, GadgetType},
+    utils::loader::ModelMsgpack,
+};
 
 const WASM_PATH: &str =
     "./external-actor-queue/target/wasm32-unknown-unknown/release/external_actor_queue.opt.wasm";
@@ -131,16 +131,6 @@ pub struct ParamsKZGLayout<E: Engine> {
     s_g2: E::G2Affine,
 }
 
-impl<E: Engine> ParamsKZGLayout<E> {
-    const fn g_data_offset() -> isize {
-        std::mem::offset_of!(Self, g) as isize + 8
-    }
-
-    const fn g_lagrange_data_offset() -> isize {
-        std::mem::offset_of!(Self, g_lagrange) as isize + 8
-    }
-}
-
 fn get_kzg_data() -> (Vec<Vec<u8>>, Vec<Vec<u8>>, KzgParamsNoVec) {
     let mut params = zkml::utils::proving_kzg::get_kzg_params("./params_kzg", 15);
 
@@ -207,7 +197,6 @@ async fn initializator(program_id: ProgramId) {
         g_lagrange_data.chunks(g_lagrange_data.len() / 128),
     )
     .enumerate()
-    //.skip(127)
     {
         println!("Init::LoadKZG sending... {i}");
         let payload = external_actor_queue::io::Incoming::Initializing(
@@ -223,8 +212,6 @@ async fn initializator(program_id: ProgramId) {
     let model =
         zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
     let circuit = zkml::model::ModelCircuit::<Fr>::generate_from_msgpack(model, true);
-    // It's weird behaviour but this command fills GadgetConfig.
-    zkml::utils::proving_kzg::verify_circuit_kzg(circuit, "./vkey", "./proof", "./public_vals");
     let gadget_config_data = unsafe {
         GadgetConfigCodec::from(zkml::model::GADGET_CONFIG.lock().unwrap().clone()).encode()
     };
@@ -246,32 +233,61 @@ async fn client(program_id: ProgramId) {
     assert!(listener.blocks_running().await.unwrap());
 
     println!("Client::SubmitInput sending...");
-    let model =
-        zkml::utils::loader::load_model_msgpack("./model/model.msgpack", "./model/inp.msgpack");
-    let model_data = rmp_serde::to_vec(&model).unwrap();
+    let input = {
+        let input_file = File::open("./model/inp.msgpack").unwrap();
+        let mut reader = BufReader::new(input_file);
+        let mut input = vec![];
+        reader.read_to_end(&mut input);
+        input
+    };
+
     let payload = external_actor_queue::io::Incoming::Client(
-        external_actor_queue::io::ClientMessage::SubmitInput { input: model_data },
+        external_actor_queue::io::ClientMessage::SubmitInput {
+            input: input.clone(),
+        },
     );
     let new_payload_message_id =
         send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Client::SubmitInput sent");
 
     println!("Client::VerifierKey sending...");
-    let vkey_data = std::fs::read("./vkey").unwrap();
+    let model = zkml::utils::loader::load_model_msgpack_and_bytes("./model/model.msgpack", input);
+    let circuit = zkml::model::ModelCircuit::<Fr>::generate_from_msgpack(model, true);
+    let params_kzg = zkml::utils::proving_kzg::get_kzg_params("./params_kzg", 15);
+    let vkey = keygen_vk(&params_kzg, &circuit).unwrap();
+    let vkey_data = vkey.to_bytes(SerdeFormat::RawBytes);
+
     let payload = external_actor_queue::io::Incoming::Client(
         external_actor_queue::io::ClientMessage::VerifierKey { vkey_data },
     );
     let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
     println!("Client::VerifierKey sent");
 
-    // Should panic on last iteration.
-    for i in 0..35 {
+    for i in 0..34 {
         println!("Client::Verify {i} sending...");
         let payload = external_actor_queue::io::Incoming::Client(
             external_actor_queue::io::ClientMessage::Verify,
         );
         let _ = send_message_and_wait_for_success(&api, &mut listener, program_id, payload).await;
         println!("Client::Verify {i} sent");
+    }
+
+    loop {
+        let mut msg = api.get_mailbox_messages(1).await.unwrap();
+        if msg.len() == 1 {
+            let msg = msg.pop().unwrap().0;
+            api.claim_value(msg.id()).await.unwrap();
+            let event = ExtActorEvent::decode(&mut msg.payload()).unwrap();
+
+            match event {
+                ExtActorEvent::ProofValidated { validity } => {
+                    panic!("Validated {}", validity);
+                }
+                _ => {
+                    println!("WHAT?");
+                }
+            }
+        }
     }
 }
 
@@ -287,12 +303,25 @@ async fn prover(program_id: ProgramId) {
         if msg.len() == 1 {
             let msg = msg.pop().unwrap().0;
             api.claim_value(msg.id()).await.unwrap();
-            let event = ExtActorEvent::decode(&mut msg.payload_bytes()).unwrap();
+            let event = ExtActorEvent::decode(&mut msg.payload()).unwrap();
 
             match event {
                 ExtActorEvent::NewPayload { client } => {
-                    // TODO: Read inputs and compute proof.
-                    //let queue: Vec<ExtQueueMessage> = api.read_state(program_id).await.unwrap();
+                    let input: Vec<([u8; 32], Vec<u8>)> = api.read_state(program_id).await.unwrap();
+                    let input = input
+                        .into_iter()
+                        .find(|inp| inp.0 == client)
+                        .expect("Record about provided input in state")
+                        .1;
+
+                    let model = zkml::utils::loader::load_model_msgpack_and_bytes(
+                        "./model/model.msgpack",
+                        input,
+                    );
+                    let circuit =
+                        zkml::model::ModelCircuit::<Fr>::generate_from_msgpack(model, true);
+                    // Writes ./proof and ./public_vals
+                    zkml::utils::proving_kzg::time_circuit_kzg(circuit);
 
                     let proof_data = std::fs::read("./proof").unwrap();
                     let pub_vals_data = std::fs::read("./public_vals").unwrap();
@@ -314,6 +343,7 @@ async fn prover(program_id: ProgramId) {
                 ExtActorEvent::InvalidProof { client } => {
                     panic!("Invalid proof");
                 }
+                _ => {}
             }
         }
     }

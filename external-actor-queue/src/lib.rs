@@ -6,57 +6,47 @@ mod code {
     include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 }
 
-use core::pin::Pin;
-
 #[cfg(feature = "std")]
 pub use code::WASM_BINARY_OPT as WASM_BINARY;
 
 extern crate gstd;
 extern crate halo2_proofs_wasm;
-extern crate halo2curves_wasm;
 extern crate hashbrown;
 extern crate zkml_wasm;
 
 pub mod events;
 pub mod io;
-pub mod queue;
-#[cfg(test)]
-mod tests;
 
 use gstd::{prelude::*, ActorId, MessageId};
-
-use halo2curves_wasm::pairing::{MillerLoopResult, MultiMillerLoop};
-use halo2curves_wasm::serde::SerdeObject;
-use hashbrown::HashMap;
-
-use hashbrown::hash_map::Entry;
-use io::{
-    ClientMessage, GadgetConfigCodec, Incoming, InitializingMessage, KzgParamsNoVec, ProverMessage,
-};
-use queue::{NewMessage, Queue};
-
-use halo2_proofs_wasm::poly::commitment::Verifier;
-use halo2_proofs_wasm::poly::kzg::msm::DualMSM;
-use halo2_proofs_wasm::poly::kzg::multiopen::shplonk::{
-    verifier::VerifierIntermediateState, VerifierSHPLONK,
-};
 use halo2_proofs_wasm::{
-    halo2curves_wasm::bn256::{Bn256, Fr, G1Affine},
+    halo2curves_wasm::{
+        bn256::{Bn256, Fr, G1Affine},
+        group::Group,
+        pairing::{MillerLoopResult, MultiMillerLoop},
+        serde::SerdeObject,
+    },
     plonk::{verify_proof_stage_1, VerifyingKey},
     poly::{
-        commitment::Params,
+        commitment::{Params, Verifier},
         kzg::{
             commitment::{KZGCommitmentScheme, ParamsKZG},
-            msm::DualMSMData,
-            multiopen::shplonk::IntermediateSetsData,
+            msm::{DualMSM, DualMSMData},
+            multiopen::shplonk::{
+                verifier::VerifierIntermediateState, IntermediateSetsData, VerifierSHPLONK,
+            },
             strategy::SingleStrategy,
         },
     },
     transcript::{Blake2bRead, Challenge255, TranscriptReadBuffer},
     SerdeFormat,
 };
-use halo2curves_wasm::group::Group;
+use hashbrown::{hash_map::Entry, HashMap};
+use io::{
+    ClientMessage, GadgetConfigCodec, Incoming, InitializingMessage, KzgParamsNoVec, ProverMessage,
+};
 use zkml_wasm::gadgets::gadget::GadgetConfig;
+
+use crate::events::Event;
 
 static mut VERIFICATOR_STATE: Option<VerificatorState> = Some(VerificatorState::Initializing {
     kzg_g_data: vec![],
@@ -77,18 +67,6 @@ enum VerificatorState {
         gadget_config: GadgetConfig,
         vkey_map: HashMap<i64, i64>,
     },
-}
-
-struct DataForVerify {
-    params_kzg: ParamsKZG<Bn256>,
-    vkey: VerifyingKey<G1Affine>,
-    pub_vals: Vec<Fr>,
-}
-
-struct ImmutableData {
-    params_kzg: ParamsKZG<Bn256>,
-    gadget_config: GadgetConfig,
-    vkey_map: HashMap<i64, i64>,
 }
 
 enum VerificationStage {
@@ -238,6 +216,8 @@ unsafe fn handle_prover_message(msg: ProverMessage) {
             pub_vals_data,
             client,
         } => {
+            let client: ActorId = client.into();
+
             let stage = VERIFICATION_STAGES
                 .as_mut()
                 .unwrap()
@@ -288,7 +268,9 @@ unsafe fn handle_client_message(msg: ClientMessage) {
                 Entry::Vacant(entry) => {
                     entry.insert(VerificationStage::Input { input_data: input });
 
-                    events::send(events::Event::NewPayload { client });
+                    events::send(events::Event::NewPayload {
+                        client: client.into(),
+                    });
                 }
             }
         }
@@ -428,7 +410,8 @@ unsafe fn handle_client_message(msg: ClientMessage) {
                     VerificationStage::PreVerify { mml_result } => {
                         let result = bool::from(mml_result.final_exponentiation().is_identity());
 
-                        gstd::debug!("Verified! {}", result);
+                        gstd::msg::send(client, Event::ProofValidated { validity: result }, 0)
+                            .unwrap();
 
                         Some(VerificationStage::Verify { result })
                     }
@@ -447,5 +430,20 @@ unsafe fn handle_client_message(msg: ClientMessage) {
 
 #[no_mangle]
 extern "C" fn state() {
-    gstd::msg::reply(unsafe { Queue::queue().clone() }, 0).expect("Failed to share state");
+    let provided_inputs: Vec<([u8; 32], _)> = unsafe {
+        VERIFICATION_STAGES
+            .as_ref()
+            .unwrap()
+            .iter()
+            .filter_map(|(k, v)| {
+                if let VerificationStage::Input { ref input_data } = v {
+                    Some((k.clone().into(), input_data.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    gstd::msg::reply(provided_inputs, 0).expect("Failed to share state");
 }

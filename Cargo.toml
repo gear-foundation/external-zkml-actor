@@ -5,16 +5,16 @@ edition = "2021"
 
 [dependencies]
 zkml = { git = "https://github.com/mertwole/gear-external-ml-actor-deps" }
+halo2_proofs = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", features = ["circuit-params"] }
 
-gclient = { git = "https://github.com/gear-tech/gear" }
-gear-core = { git = "https://github.com/gear-tech/gear" }
+gclient = { git = "https://github.com/gear-tech/gear", branch = "testnet" }
+gear-core = { git = "https://github.com/gear-tech/gear", branch = "testnet" }
 tokio = { version = "1.28.2", features = ["full"] }
 external-actor-queue = { path = "./external-actor-queue" }
 codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
 serde = "1.0"
 rmp-serde = "*"
-
-halo2_proofs = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", features = ["circuit-params"] }
+hex = "0.4.3"
 
 futures = "0.3.28"
 rand = "0.8.5"

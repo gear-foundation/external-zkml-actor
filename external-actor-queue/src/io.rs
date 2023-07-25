@@ -1,10 +1,7 @@
 use codec::{Decode, Encode};
-use gstd::prelude::*;
-
-use gstd::ActorId;
+use gstd::{prelude::*, ActorId};
 use halo2_proofs_wasm::plonk::{Advice, Column, Fixed, Selector, TableColumn};
-use zkml_wasm::gadgets::gadget::GadgetConfig;
-use zkml_wasm::gadgets::gadget::GadgetType;
+use zkml_wasm::gadgets::gadget::{GadgetConfig, GadgetType};
 
 #[derive(codec::Encode, codec::Decode)]
 pub struct GadgetConfigCodec {
@@ -120,7 +117,7 @@ pub enum InitializingMessage {
 #[derive(Encode, Decode, Debug, TypeInfo)]
 pub enum ProverMessage {
     SubmitProof {
-        client: ActorId,
+        client: [u8; 32],
         proof_data: Vec<u8>,
         pub_vals_data: Vec<u8>,
     },

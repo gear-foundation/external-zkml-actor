@@ -6,8 +6,9 @@ pub static EVENT_DESTINATION: [u8; 32] =
 
 #[derive(Debug, Encode, Decode)]
 pub enum Event {
-    NewPayload { client: ActorId },
-    InvalidProof { client: ActorId },
+    NewPayload { client: [u8; 32] },
+    InvalidProof { client: [u8; 32] },
+    ProofValidated { validity: bool },
 }
 
 pub fn send(event: Event) {
