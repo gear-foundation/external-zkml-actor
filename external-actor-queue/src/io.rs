@@ -3,7 +3,7 @@ use gstd::{prelude::*, ActorId};
 use halo2_proofs_wasm::plonk::{Advice, Column, Fixed, Selector, TableColumn};
 use zkml_wasm::gadgets::gadget::{GadgetConfig, GadgetType};
 
-#[derive(codec::Encode, codec::Decode)]
+#[derive(codec::Encode, codec::Decode, Clone)]
 pub struct GadgetConfigCodec {
     pub used_gadgets: BTreeSet<GadgetType>,
     pub columns: Vec<Column<Advice>>,
@@ -86,7 +86,7 @@ impl From<GadgetConfig> for GadgetConfigCodec {
     }
 }
 
-#[derive(Encode, Decode, Debug, TypeInfo)]
+#[derive(Encode, Decode, Debug, TypeInfo, Clone)]
 pub struct KzgParamsNoVec {
     pub k: u32,
     pub n: u64,
@@ -94,18 +94,19 @@ pub struct KzgParamsNoVec {
     pub s_g2_data: [u8; 128],
 }
 
-#[derive(Encode, Decode, Debug, TypeInfo)]
+#[derive(Encode, Decode, Debug, TypeInfo, Clone)]
 pub enum Incoming {
     Initializing(InitializingMessage),
     Prover(ProverMessage),
     Client(ClientMessage),
 }
 
-#[derive(Encode, Decode, Debug, TypeInfo)]
+#[derive(Encode, Decode, Debug, TypeInfo, Clone)]
 pub enum InitializingMessage {
     LoadKZG {
         g_data: Vec<Vec<u8>>,
         g_lagrange_data: Vec<Vec<u8>>,
+        load_offset: u32,
     },
     FillVkeyMap,
     Finalize {
@@ -114,18 +115,30 @@ pub enum InitializingMessage {
     },
 }
 
-#[derive(Encode, Decode, Debug, TypeInfo)]
+#[derive(Encode, Decode, Debug, TypeInfo, Clone)]
 pub enum ProverMessage {
     SubmitProof {
         client: [u8; 32],
         proof_data: Vec<u8>,
         pub_vals_data: Vec<u8>,
     },
+    ChangeProver {
+        new: [u8; 32],
+    },
 }
 
-#[derive(Encode, Decode, Debug, TypeInfo)]
+#[derive(Encode, Decode, Debug, TypeInfo, Clone)]
 pub enum ClientMessage {
     SubmitInput { input: Vec<u8> },
+    CloneVkeyData,
     VerifierKey { vkey_data: Vec<u8> },
     Verify,
+    PurgeVerification,
+}
+
+#[derive(Debug, Encode, Decode)]
+pub enum Event {
+    NewPayload { client: [u8; 32] },
+    NewProof,
+    ProofValidated { validity: bool },
 }

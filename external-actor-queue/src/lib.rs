@@ -14,7 +14,6 @@ extern crate halo2_proofs_wasm;
 extern crate hashbrown;
 extern crate zkml_wasm;
 
-pub mod events;
 pub mod io;
 
 use gstd::{prelude::*, ActorId, MessageId};
@@ -46,7 +45,10 @@ use io::{
 };
 use zkml_wasm::gadgets::gadget::GadgetConfig;
 
-use crate::events::Event;
+use crate::io::Event;
+
+pub static mut EXTERNAL_ACTOR: [u8; 32] =
+    hex_literal::hex!("4e1da7ba69277d6d4fcb6d4920f5d2dbd114a1e6c485e7939918461504f72d3c");
 
 static mut VERIFICATOR_STATE: Option<VerificatorState> = Some(VerificatorState::Initializing {
     kzg_g_data: vec![],
@@ -133,7 +135,18 @@ unsafe fn handle_initialization(msg: InitializingMessage) {
             InitializingMessage::LoadKZG {
                 g_data,
                 g_lagrange_data,
+                load_offset,
             } => {
+                if load_offset as usize != kzg_g_data.len()
+                    || load_offset as usize != kzg_g_lagrange_data.len()
+                {
+                    panic!(
+                        "Wrong load_offset: expected {}, found {}",
+                        kzg_g_data.len(),
+                        load_offset
+                    );
+                }
+
                 let mut g = g_data
                     .into_iter()
                     .map(|g| G1Affine::from_raw_bytes(&g).expect("Failed to decode G1Affine"))
@@ -171,11 +184,16 @@ unsafe fn handle_initialization(msg: InitializingMessage) {
                 kzg_params,
                 gadget_config_data,
             } => {
-                // if kzg_g_data.len() != kzg_params.n as usize
-                //     || kzg_g_lagrange_data.len() != kzg_params.n as usize
-                // {
-                //     panic!("KZG Params are not fully loaded");
-                // }
+                if kzg_g_data.len() != kzg_params.n as usize
+                    || kzg_g_lagrange_data.len() != kzg_params.n as usize
+                {
+                    panic!(
+                        "KZG Params are not fully loaded {} {} {}",
+                        kzg_g_data.len(),
+                        kzg_g_lagrange_data.len(),
+                        kzg_params.n
+                    );
+                }
 
                 if vkey_map.is_none() {
                     panic!("Fill verifier key map first");
@@ -208,7 +226,7 @@ unsafe fn handle_initialization(msg: InitializingMessage) {
 }
 
 unsafe fn handle_prover_message(msg: ProverMessage) {
-    // TODO: Assert prover.
+    assert_eq!(gstd::msg::source(), EXTERNAL_ACTOR.into());
 
     match msg {
         ProverMessage::SubmitProof {
@@ -237,11 +255,16 @@ unsafe fn handle_prover_message(msg: ProverMessage) {
                         proof_data,
                         pub_vals,
                     };
+
+                    gstd::msg::send(client, Event::NewProof, 0).expect("Failed to send message");
                 }
                 _ => {
                     panic!("Invalid verification stage");
                 }
             }
+        }
+        ProverMessage::ChangeProver { new } => {
+            EXTERNAL_ACTOR = new;
         }
     }
 }
@@ -262,17 +285,25 @@ unsafe fn handle_client_message(msg: ClientMessage) {
         ClientMessage::SubmitInput { input } => {
             match VERIFICATION_STAGES.as_mut().unwrap().entry(client) {
                 Entry::Occupied(_) => {
-                    // Actually, that's not yet implemented.
                     panic!("Clean previous proving session first");
                 }
                 Entry::Vacant(entry) => {
                     entry.insert(VerificationStage::Input { input_data: input });
 
-                    events::send(events::Event::NewPayload {
-                        client: client.into(),
-                    });
+                    gstd::msg::send(
+                        EXTERNAL_ACTOR.into(),
+                        Event::NewPayload {
+                            client: client.into(),
+                        },
+                        0,
+                    )
+                    .expect("Failed to send message");
                 }
             }
+        }
+        ClientMessage::CloneVkeyData => {
+            zkml_wasm::gadgets::bias_div_round_relu6::VKEY_MAP = Some(vkey_map.clone());
+            zkml_wasm::model::GADGET_CONFIG = Some(gadget_config.clone());
         }
         ClientMessage::VerifierKey { vkey_data } => {
             match VERIFICATION_STAGES.as_mut().unwrap().entry(client) {
@@ -281,9 +312,6 @@ unsafe fn handle_client_message(msg: ClientMessage) {
                         proof_data,
                         pub_vals,
                     } => {
-                        zkml_wasm::gadgets::bias_div_round_relu6::VKEY_MAP = Some(vkey_map.clone());
-                        zkml_wasm::model::GADGET_CONFIG = Some(gadget_config.clone());
-
                         let verifier_key: VerifyingKey<G1Affine> =
                             VerifyingKey::read::<_, zkml_wasm::model::ModelCircuit<Fr>>(
                                 &mut &vkey_data[..],
@@ -415,7 +443,9 @@ unsafe fn handle_client_message(msg: ClientMessage) {
 
                         Some(VerificationStage::Verify { result })
                     }
-                    VerificationStage::Verify { result } => panic!("Proof already verified"),
+                    VerificationStage::Verify { result } => {
+                        panic!("Proof already verified with result {}", result)
+                    }
                     _ => {
                         panic!("Invalid verification stage")
                     }
@@ -423,6 +453,14 @@ unsafe fn handle_client_message(msg: ClientMessage) {
                 Entry::Vacant(_) => {
                     panic!("Invalid client");
                 }
+            };
+        }
+        ClientMessage::PurgeVerification => {
+            match VERIFICATION_STAGES.as_mut().unwrap().entry(client) {
+                Entry::Occupied(stage) => {
+                    stage.remove();
+                }
+                _ => panic!("No verification is in process"),
             };
         }
     }

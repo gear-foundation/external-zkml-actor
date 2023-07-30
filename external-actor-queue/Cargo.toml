@@ -8,8 +8,8 @@ halo2_proofs_wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-
 halo2_gadgets_wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps", default-features = false }
 zkml-wasm = { git = "https://github.com/mertwole/gear-external-ml-actor-deps" }
 
-gstd = { git = "https://github.com/gear-tech/gear.git", branch = "testnet" }
-gcore = { git = "https://github.com/gear-tech/gear.git", branch = "testnet" }
+gstd = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+gcore = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
 codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
 scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
@@ -17,10 +17,7 @@ hashbrown = "0.13"
 hex-literal = "*"
 
 [build-dependencies]
-gear-wasm-builder = { git = "https://github.com/gear-tech/gear.git", branch = "testnet" }
-
-[dev-dependencies]
-gtest = { git = "https://github.com/gear-tech/gear.git", branch = "testnet" }
+gear-wasm-builder = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
 
 [features]
 debug = ["gstd/debug"]
