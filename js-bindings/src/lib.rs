@@ -41,8 +41,8 @@ pub fn load_model(mut model: ModelMsgpack, input: &[u8]) -> ModelMsgpack {
 
 #[wasm_bindgen]
 pub fn get_vkey_data(inputs: &[u8]) -> Vec<u8> {
-    let params_kzg_data = include_bytes!("../data/15.params");
-    let model_data = include_bytes!("../data/model.msgpack");
+    let params_kzg_data = include_bytes!("../../params_kzg/15.params");
+    let model_data = include_bytes!("../../model/model.msgpack");
 
     let params_kzg = ParamsKZG::<Bn256>::read(&mut &params_kzg_data[..]).unwrap();
 
