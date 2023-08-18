@@ -1,0 +1,25 @@
+[package]
+name = "external_ml_actor_contract"
+version = "0.1.0"
+build = "build.rs"
+
+[dependencies]
+halo2_proofs_wasm = { path = "../deps-override/halo2-wasm/halo2_proofs", default-features = false, features = ["circuit-params"] }
+halo2_gadgets_wasm = { path = "../deps-override/halo2-wasm/halo2_gadgets", default-features = false }
+zkml_wasm = { path = "../deps-override/zkml-wasm" }
+
+gstd = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+gcore = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
+scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+hashbrown = "0.13"
+hex-literal = "*"
+
+[build-dependencies]
+gear-wasm-builder = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+
+[features]
+debug = ["gstd/debug"]
+default = ["std"]
+std = []

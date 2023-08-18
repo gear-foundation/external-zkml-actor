@@ -1,0 +1,46 @@
+[package]
+name = "halo2_gadgets_wasm"
+version = "0.2.0"
+authors = [
+    "Sean Bowe <sean@electriccoin.co>",
+    "Jack Grigg <jack@electriccoin.co>",
+    "Daira Hopwood <daira@jacaranda.org>",
+    "Ying Tong Lai <yingtong@electriccoin.co>",
+    "Kris Nuttycombe <kris@electriccoin.co>",
+]
+edition = "2021"
+rust-version = "1.56.1"
+description = "Reusable gadgets and chip implementations for Halo 2"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/zcash/halo2"
+readme = "README.md"
+categories = ["cryptography"]
+keywords = ["halo", "proofs", "zcash", "zkp", "zkSNARKs"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
+
+[dependencies]
+gstd = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+no_std_io = "0.5"
+no-std-compat = "0.4.1"
+bitvec = {version = "1", default-features = false }
+ff = { version = "0.13", features = ["bits"] }
+group = "0.13"
+halo2_proofs_wasm = { version = "0.2", path = "../halo2_proofs", default-features = false }
+halo2curves_wasm = { path = "../halo2curves", default-features = false }
+
+[dev-dependencies]
+criterion = "0.3"
+proptest = "1.0.0"
+
+[target.'cfg(unix)'.dev-dependencies]
+pprof = { version = "0.8", features = ["criterion", "flamegraph"] } # MSRV 1.56
+
+[lib]
+bench = false
+
+[features]
+circuit-params = ["halo2_proofs_wasm/circuit-params"]
+unstable = []

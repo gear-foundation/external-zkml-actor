@@ -1,0 +1,33 @@
+[package]
+name = "zkml_wasm"
+version = "0.0.1"
+edition = "2021"
+description = "Zero-knowledge machine learning"
+license = "LICENSE"
+homepage = "https://github.com/ddkang/zkml"
+repository = "https://github.com/ddkang/zkml-public.git"
+readme = "README.md"
+
+[profile.dev]
+opt-level = 3
+
+[profile.test]
+opt-level = 3
+
+[dependencies]
+gstd = { git = "https://github.com/gear-tech/gear.git", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
+
+halo2_proofs_wasm = { path = "../halo2-wasm/halo2_proofs", default-features = false, features = ["circuit-params"] }
+halo2_gadgets_wasm = { path = "../halo2-wasm/halo2_gadgets", default-features = false }
+halo2curves_wasm = { path = "../halo2-wasm/halo2curves", default-features = false, features = ["reexport"] }
+
+ndarray = { version = "0.15.6", default-features = false }
+num-bigint = { version = "0.4.3", default-features = false }
+num-traits = { version = "0.2", default-features = false }
+lazy_static = { version = "1.4.0", default-features = false }
+rounded-div = "0.1.2"
+libm = "0.2.7"
+
+[patch.crates-io]
+getrandom = { path = "./getrandom" }

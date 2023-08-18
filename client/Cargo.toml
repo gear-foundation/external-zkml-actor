@@ -1,0 +1,25 @@
+[package]
+name = "external_ml_actor_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zkml_client = { path = "../deps-override/zkml-client" }
+halo2_proofs_client = { path = "../deps-override/halo2-client/halo2_proofs", features = ["circuit-params"] }
+
+external_ml_actor_contract = { path = "../contract" }
+gclient = { git = "https://github.com/gear-tech/gear", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+gear-core = { git = "https://github.com/gear-tech/gear", rev = "5f1c499f26956901f21f3892b1593910fb09def6" }
+tokio = { version = "1.28.2", features = ["full"] }
+codec = { package = "parity-scale-codec", version = "3.4.0", default-features = false, features = ["derive"] }
+serde = "1.0"
+rmp-serde = "*"
+hex = "0.4.3"
+
+futures = "0.3.28"
+rand = "0.8.5"
+itertools = "*"
+
+[patch.crates-io]
+sp-core = { git = "https://github.com/gear-tech/substrate.git", branch = "gear-stable" }
+sp-runtime = { git = "https://github.com/gear-tech/substrate.git", branch = "gear-stable" }

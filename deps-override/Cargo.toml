@@ -1,0 +1,12 @@
+[workspace]
+
+members = [
+    "halo2/halo2curves",
+    "halo2/halo2_proofs",
+    "halo2/halo2_gadgets",
+    "zkml-wasm",
+    "getrandom",
+    "zkml-client",
+    "halo2-client/halo2_proofs",
+    "halo2-client/halo2_gadgets"
+]
