@@ -17,6 +17,6 @@ The process of employing zero-knowledge proofs for computations involves four ke
 
 3. `Prover`: The prover retrieves this input from the zk-smart-contract, conducts an evaluation of the machine learning model, and generates a zero-knowledge proof that attests to the validity of the computation. The resulting output of the machine learning model, along with the zero-knowledge proof, is then submitted back to the `zk-smart-contract`.
 
-4. `User Verification`: Users initiate a verification process by interacting with the zk-smart-contract. The `zk-smart-contract` orchestrates the verification of the zero-knowledge proof, independently confirming the accuracy of the computation without exposing sensitive data.
+4. `User Verification`: Users initiate a verification process by interacting with the `zk-smart-contract`. The `zk-smart-contract` orchestrates the verification of the zero-knowledge proof, independently confirming the accuracy of the computation without exposing sensitive data.
 
 5. `Verification Outcome`: Once the verification process is completed within the `zk-smart-contract`, the user is informed of the verification outcome.
