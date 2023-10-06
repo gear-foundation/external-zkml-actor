@@ -2,7 +2,7 @@
 This is a proof-of-concept implementation of a zero-knowledge proof application designed for Gear-powered blockchains.
 
 > **Note**
-Please be aware that this work might contain inaccuracies, suboptimal optimizations, and critical security bugs. The solutions employed are absolutely not recommended for production use, as they are still in heavy development.
+Keep in mind that this example is intended for educational purposes as a technology demonstration. For production use, it is recommended to introduce certain optimizations addressing potential performance and security vulnerability issues.
 
 # Overview
 This implementation offers the capability to offload the resource-intensive computations from the blockchain while ensuring their integrity. As an illustrative example, we demonstrate the evaluation of the MNIST machine learning model. This is achieved by generating zero-knowledge proofs of computations and subsequently verifying them on-chain.
